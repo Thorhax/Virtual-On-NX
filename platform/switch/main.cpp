@@ -29,7 +29,10 @@
 extern "C" void userAppInit(void) {
     romfsInit();
     mkdir("sdmc:/switch", 0777);
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_ROMSET_VON)
+    mkdir("sdmc:/switch/von", 0777);
+    chdir("sdmc:/switch/von");
+#elif defined(M2_SCSP_GAME)
     mkdir("sdmc:/switch/vf2", 0777);
     chdir("sdmc:/switch/vf2");
 #else
@@ -47,7 +50,11 @@ namespace {
 
 constexpr int kDisplayWidth = 1280;
 constexpr int kDisplayHeight = 720;
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_ROMSET_VON)
+constexpr const char *kDirectory = "sdmc:/switch/von";
+constexpr const char *kAppName = "Virtual-On";
+constexpr const char *kPerfLogName = "von-perf.log";
+#elif defined(M2_SCSP_GAME)
 constexpr const char *kDirectory = "sdmc:/switch/vf2";
 constexpr const char *kAppName = "Virtua Fighter 2";
 constexpr const char *kPerfLogName = "vf2-perf.log";
@@ -118,7 +125,22 @@ bool save_bytes(const std::string &path, const uint8_t *data, size_t size) {
 }
 
 std::string find_rom_file() {
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_ROMSET_VON)
+    static const char *candidates[] = {
+        "sdmc:/switch/von/von.zip",
+        "von.zip",
+        "romfs:/von.zip",
+        "/switch/von/von.zip",
+        "sdmc:/switch/von.zip",
+    };
+    for (const char *path : candidates) {
+        struct stat st{};
+        if (stat(path, &st) == 0 && st.st_size > 0) {
+            return std::string(path);
+        }
+    }
+    return "von.zip";
+#elif defined(M2_SCSP_GAME)
     static const char *candidates[] = {
         "sdmc:/switch/vf2/vf2.zip",
         "vf2.zip",
@@ -166,7 +188,7 @@ constexpr uint8_t kDefaultEeprom[128] = {
     0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00
 };
 
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
 class SoundWorker {
 public:
     SoundWorker(switch_app::Audio &audio) : audio_(audio) {
@@ -312,7 +334,7 @@ int main(int, char **) {
     }
 
     switch_app::Audio audio;
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
     SoundWorker sound_worker(audio);
 #else
     switch_app::NativeAudio<snd::NativeSoundEngine> native_audio;
@@ -337,7 +359,7 @@ int main(int, char **) {
     bool wait_release = true;
     int selection = 0;
     bool test_switch_held = false;
-#if !defined(M2_ROMSET_VF2)
+#if !defined(M2_SCSP_GAME)
     bool use_native_audio = true; // Native audio skips 68000 CPU emulation for huge speedup!
 #endif
     bool show_perf_overlay = false;
@@ -345,23 +367,31 @@ int main(int, char **) {
     uint8_t pulse = 0;
     uint32_t previous_buttons = 0;
     bool muted = false;
+#if defined(M2_ROMSET_VON)
+    bool arcade_mono = false; // stereo (the hard-right hits are a VF2 thing)
+#else
     bool arcade_mono = true; // VF2: see Audio::set_arcade_mono
+#endif
     std::string banner;       // short in-game message (cheat toggles)
     uint32_t banner_until = 0;
 
     std::string rom_path = find_rom_file();
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
+#if defined(M2_ROMSET_VON)
+    std::string status = "Place von.zip in sdmc:/switch/von/ then choose START GAME.";
+#else
     std::string status = "Place vf2.zip in sdmc:/switch/vf2/ then choose START GAME.";
+#endif
 #else
     std::string status = "Place daytona.zip in sdmc:/switch/daytona/ then choose START GAME.";
 #endif
 
     auto save = [&]() {
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
         sound_worker.wait();
 #endif
         if (!game) return true;
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
         save_bytes("backup_ram.bin", game->board().backup_ram().data(), game->board().backup_ram().size());
         save_bytes("ioboard_eeprom.bin", game->board().io().eeprom.data(), game->board().io().eeprom.size());
 #else
@@ -373,7 +403,7 @@ int main(int, char **) {
 
     auto load_nvram = [&]() {
         if (!game) return;
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
         bool loaded = load_bytes("backup_ram.bin", game->board().backup_ram().data(), game->board().backup_ram().size());
         if (!loaded) {
             load_bytes("romfs:/backup_ram.bin", game->board().backup_ram().data(), game->board().backup_ram().size());
@@ -394,8 +424,12 @@ int main(int, char **) {
         SDL_RenderClear(renderer);
 
         SDL_SetRenderDrawColor(renderer, 240, 240, 245, 255);
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
+#if defined(M2_ROMSET_VON)
+        switch_app::text(renderer, "CYBER TROOPERS VIRTUAL-ON - NINTENDO SWITCH", 40, 30, 3, 40, 1);
+#else
         switch_app::text(renderer, "VIRTUA FIGHTER 2 - NINTENDO SWITCH", 40, 30, 3, 40, 1);
+#endif
 
         const std::string labels[] = {
             game ? "RESUME GAME" : "START GAME",
@@ -440,8 +474,12 @@ int main(int, char **) {
         switch_app::text(renderer, status, 40, 435, 2, 70, 2);
 
         SDL_SetRenderDrawColor(renderer, 100, 180, 255, 255);
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
+#if defined(M2_ROMSET_VON)
+        switch_app::text(renderer, "CONTROLS: STICKS: LEVERS  ZL/ZR: SHOT  L/R: DASH  (D-PAD/ABXY: LEVERS)", 40, 490, 2, 70, 1);
+#else
         switch_app::text(renderer, "CONTROLS: B: PUNCH  A: KICK  Y: GUARD  X: GUARD+KICK  (ZL/ZR/L/R: GUARD)", 40, 490, 2, 70, 1);
+#endif
         switch_app::text(renderer, "MOVEMENT: D-PAD OR LEFT ANALOG STICK (8-WAY)", 40, 520, 2, 70, 1);
         switch_app::text(renderer, "TEST MODE: X=UP  B=DOWN  Y=OPT+  A=OPT-  PLUS=SELECT", 40, 550, 2, 70, 1);
         switch_app::text(renderer, "PLUS=START   MINUS=COIN   PLUS+MINUS=MENU", 40, 580, 2, 70, 1);
@@ -457,12 +495,12 @@ int main(int, char **) {
     };
 
     auto start_game = [&]() -> bool {
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
         sound_worker.wait();
 #endif
         save();
         audio.close();
-#if !defined(M2_ROMSET_VF2)
+#if !defined(M2_SCSP_GAME)
         native_audio.close();
 #endif
         game.reset();
@@ -473,15 +511,17 @@ int main(int, char **) {
 
         try {
             auto images = rt::import_rom_set(rom_path);
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
             if (!audio.open(true)) {
                 throw std::runtime_error(std::string("Audio open failed: ") + SDL_GetError());
             }
             audio.mute(muted);
             audio.set_arcade_mono(arcade_mono);
             game = std::make_unique<rt::GameLoop>(std::move(images), true);
+#if defined(M2_ROMSET_VF2)
             // Voices and sound effects +3 dB over the music (see Scsp::set_effects_gain).
             if (game->sound()) game->sound()->set_effects_gain(1.41f);
+#endif
 #else
             if (use_native_audio) {
                 auto engine = std::make_unique<snd::NativeSoundEngine>(
@@ -516,7 +556,7 @@ int main(int, char **) {
             // Set up high-precision profile clocks for microsecond telemetry
             game->set_profile_clock([]() -> uint64_t { return SDL_GetPerformanceCounter(); });
             game->board().video().set_profile_clock([]() -> uint64_t { return SDL_GetPerformanceCounter(); });
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
             // Draw each picture on a worker while the next frame emulates
             // (one frame of extra latency; frees ~9 ms per frame in fights).
             game->board().video().set_threaded(true);
@@ -525,8 +565,12 @@ int main(int, char **) {
             load_nvram();
             controls = switch_app::Controls{};
             pulse = 0;
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
+#if defined(M2_ROMSET_VON)
+            status = "LEFT/RIGHT STICK: LEVERS  ZL/ZR: SHOT  L/R: DASH  PLUS: START  MINUS: COIN";
+#else
             status = "B: PUNCH  A: KICK  Y: GUARD  X: GUARD+KICK  PLUS: START  MINUS: COIN  ZL+ZR+UP: CHEAT";
+#endif
 #else
             status = "ZR: GAS   ZL: BRAKE   L/R: SHIFT   L-STICK: STEER   PLUS: START   MINUS: COIN";
 #endif
@@ -559,7 +603,7 @@ int main(int, char **) {
 
         if (!menu && !wait_release && switch_app::menu_chord(pad.buttons)) {
             menu = true;
-#if !defined(M2_ROMSET_VF2)
+#if !defined(M2_SCSP_GAME)
             if (use_native_audio) native_audio.pause();
             else audio.pause();
 #else
@@ -584,7 +628,7 @@ int main(int, char **) {
 #endif
 
         if (menu && !wait_release) {
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
             constexpr int kMenuItems = 9;
             if (pressed & switch_app::Up) selection = (selection + kMenuItems - 1) % kMenuItems;
             if (pressed & switch_app::Down) selection = (selection + 1) % kMenuItems;
@@ -734,7 +778,7 @@ int main(int, char **) {
 
         if (run_step) {
             try {
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
                 const auto pad2 = read_pad(1);
                 const auto input = controls.sample(wait_release ? switch_app::Pad{} : pad, pad2);
                 rt::Inputs mapped;
@@ -752,7 +796,7 @@ int main(int, char **) {
                 mapped.in2 = input.in2;
 #endif
 
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
                 auto packet = game->run_frame_sound_packet(mapped);
                 diag.snd_wait += sound_worker.submit(std::move(packet));
                 pulse = 0;
@@ -796,7 +840,7 @@ int main(int, char **) {
                 const uint64_t after_upload = SDL_GetPerformanceCounter();
                 perf.span(switch_app::Performance::Upload, before_upload, after_upload);
             } catch (const std::exception &err) {
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
                 sound_worker.wait();
 #endif
                 status = std::string("Runtime error: ") + err.what();
@@ -848,7 +892,7 @@ int main(int, char **) {
             perf.format(log_line, sizeof(log_line), now_ticks);
             if (perf_log_file) {
                 std::fputs(log_line, perf_log_file);
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
                 if (diag.frames) {
                     // Fixed reference work, timed: if these slow down over a
                     // session the console is (clocks, heat), not the port.
@@ -902,7 +946,7 @@ int main(int, char **) {
         }
     }
 
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_SCSP_GAME)
     sound_worker.wait();
 #endif
     save();
@@ -911,7 +955,7 @@ int main(int, char **) {
         std::fclose(perf_log_file);
     }
     audio.close();
-#if !defined(M2_ROMSET_VF2)
+#if !defined(M2_SCSP_GAME)
     native_audio.close();
 #endif
     SDL_DestroyTexture(screen_texture);

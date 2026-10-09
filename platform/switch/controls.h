@@ -42,7 +42,41 @@ inline bool menu_chord(uint32_t buttons) {
 
 class Controls {
 public:
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_ROMSET_VON)
+    // Twin sticks (Virtual-On, one player per cabinet): IN1 the left lever
+    // (directions, 0x01 left shot, 0x02 left dash), IN2 the right lever.
+    // Left stick / D-pad: left lever; right stick / X B Y A: right lever
+    // (up, down, left, right); ZL/ZR: left/right shot; L/R: left/right dash.
+    Input sample(Pad pad1, Pad = {}) {
+        Input in;
+        in.in0 = 0xff;
+        in.in1 = 0xff;
+        in.in2 = 0xff;
+        held_ = pad1.buttons;
+        if (menu_chord(pad1.buttons)) return in;
+
+        if (pad1.buttons & Minus) in.in0 &= uint8_t(~0x01);  // coin
+        if (pad1.buttons & Plus) in.in0 &= uint8_t(~0x10);   // start
+        if (pad1.buttons & StickL) in.in0 &= uint8_t(~0x04); // test
+        if (pad1.buttons & StickR) in.in0 &= uint8_t(~0x08); // service
+
+        constexpr float kDeadzone = 0.35f;
+        if (pad1.buttons & ZL) in.in1 &= uint8_t(~0x01);
+        if (pad1.buttons & L) in.in1 &= uint8_t(~0x02);
+        if ((pad1.buttons & Down) || pad1.ly < -kDeadzone) in.in1 &= uint8_t(~0x10);
+        if ((pad1.buttons & Up) || pad1.ly > kDeadzone) in.in1 &= uint8_t(~0x20);
+        if ((pad1.buttons & Right) || pad1.lx > kDeadzone) in.in1 &= uint8_t(~0x40);
+        if ((pad1.buttons & Left) || pad1.lx < -kDeadzone) in.in1 &= uint8_t(~0x80);
+
+        if (pad1.buttons & ZR) in.in2 &= uint8_t(~0x01);
+        if (pad1.buttons & R) in.in2 &= uint8_t(~0x02);
+        if ((pad1.buttons & B) || pad1.ry < -kDeadzone) in.in2 &= uint8_t(~0x10);
+        if ((pad1.buttons & X) || pad1.ry > kDeadzone) in.in2 &= uint8_t(~0x20);
+        if ((pad1.buttons & A) || pad1.rx > kDeadzone) in.in2 &= uint8_t(~0x40);
+        if ((pad1.buttons & Y) || pad1.rx < -kDeadzone) in.in2 &= uint8_t(~0x80);
+        return in;
+    }
+#elif defined(M2_ROMSET_VF2)
     // B: punch, A: kick, Y: guard, X: guard + kick; ZL/ZR/L/R: guard.
     // Returns the active-low mask to AND in (0x01 punch, 0x02 kick, 0x04 guard).
     static uint8_t action_bits(uint32_t buttons) {

@@ -139,6 +139,36 @@ struct Emitter {
             }
             return true;
         };
+        // Long reals (MAME get_1_rifl/get_2_rifl/set_rifl): a register pair
+        // (even register, low word first) or fp0-fp3 / the literals 0.0 and 1.0.
+        auto fsrcl = [&](unsigned src, bool m) -> std::string {
+            if (m) {
+                if (src < 4) return "c.m_fp[" + std::to_string(src) + "]";
+                if (src == 0x16) return "1.0";
+                return "0.0";
+            }
+            const unsigned r = src & 0x1eu;
+            return "gen::u2d(uint64_t(" + R(r) + ") | (uint64_t(" + R(r + 1) + ") << 32))";
+        };
+        auto fsetl = [&](unsigned dst, bool m, const std::string &expr) -> bool {
+            if (!m) {
+                const unsigned r = dst & 0x1eu;
+                body += "{ const uint64_t v_ = gen::d2u(" + expr + "); " + R(r) + " = uint32_t(v_); " + R(r + 1) +
+                        " = uint32_t(v_ >> 32); }";
+            } else if ((dst & 0x1cu) == 0) {
+                body += "c.m_fp[" + std::to_string(dst & 3u) + "] = " + expr + ";";
+            } else {
+                return false;
+            }
+            return true;
+        };
+        // Both long-real sources read before the result is written (MAME's order).
+        auto two_l = [&](const std::string &expr) -> bool {
+            body += "{ const double t1 = " + fsrcl(in.src1, in.m1) + ", t2 = " + fsrcl(in.src2, in.m2) + "; ";
+            if (!fsetl(in.dst, in.m3, expr)) return false;
+            body += " }";
+            return true;
+        };
         const uint32_t tgt = in.target, tgt_masked = in.target & ~3u; // bxx/bxx_s mask the target, b/bal/call/bbc/bbs do not
 
         switch (in.fmt) {
@@ -332,6 +362,51 @@ struct Emitter {
             case 0x6c0: set("gen::d2i(gen::round_to_int(" + fsrc(in.src1, in.m1) + ", AC))"); break; // cvtri
             case 0x6c2: set("gen::d2i(" + fsrc(in.src1, in.m1) + ")"); break; // cvtzri
             case 0x6c9: if (!fset(in.dst, in.m3, fsrc(in.src1, in.m1))) return unsupported(in); break; // movr
+            case 0x66d: body = "c.flushreg();"; break; // flushreg
+            case 0x676: // scalerl
+                body += "{ const uint32_t t1 = " + s1(in) + "; const double t2 = " + fsrcl(in.src2, in.m2) + "; ";
+                if (!fsetl(in.dst, in.m3, "t2 * std::pow(2.0, double(int32_t(t1)))")) return unsupported(in);
+                body += " }";
+                break;
+            case 0x68a: if (!fset(in.dst, in.m3, "std::logb(" + fsrc(in.src1, in.m1) + ")")) return unsupported(in); break; // logbnr
+            case 0x692: if (!two_l("t2 * std::log2(t1)")) return unsupported(in); break;                                       // logrl
+            case 0x695: body = "AC = (AC & ~7u) | gen::cc_d(" + fsrcl(in.src1, in.m1) + ", " + fsrcl(in.src2, in.m2) + ");"; break; // cmprl
+            case 0x699: if (!fsetl(in.dst, in.m3, "(std::pow(2.0, " + fsrcl(in.src1, in.m1) + ") - 1.0)")) return unsupported(in); break; // exprl
+            case 0x69a: if (!fsetl(in.dst, in.m3, "std::logb(" + fsrcl(in.src1, in.m1) + ")")) return unsupported(in); break; // logbnrl
+            case 0x69b: if (!fsetl(in.dst, in.m3, "gen::round_to_int(" + fsrcl(in.src1, in.m1) + ", AC)")) return unsupported(in); break; // roundrl
+            case 0x6c3: { // cvtzril: real source, 64-bit integer pair
+                const unsigned r = in.dst & 0x1eu;
+                body = "{ const uint64_t v_ = uint64_t(gen::d2i64(" + fsrc(in.src1, in.m1) + ")); " + R(r) + " = uint32_t(v_); " +
+                       R(r + 1) + " = uint32_t(v_ >> 32); }";
+                break;
+            }
+            case 0x6d9: if (!fsetl(in.dst, in.m3, fsrcl(in.src1, in.m1))) return unsupported(in); break; // movrl
+            case 0x6e2: if (!two_l("(t2 >= 0.0 ? std::fabs(t1) : -std::fabs(t1))")) return unsupported(in); break; // cpysre
+            case 0x79b: if (!two_l("t2 / t1")) return unsupported(in); break; // divrl
+            case 0x79c: if (!two_l("t2 * t1")) return unsupported(in); break; // mulrl
+            case 0x79d: if (!two_l("t2 - t1")) return unsupported(in); break; // subrl
+            case 0x79f: if (!two_l("t2 + t1")) return unsupported(in); break; // addrl
+            case 0x6e1: case 0x6e9: { // movre (0x6e1: undocumented encoding, MAME runs it as movre)
+                std::string src;
+                if (!in.m1) {
+                    const unsigned r = in.src1 & 0x1cu;
+                    src = "v[0] = " + R(r) + "; v[1] = " + R(r + 1) + "; v[2] = " + R(r + 2) + " & 0xffffu;";
+                } else {
+                    const std::string val = in.src1 < 4 ? "c.m_fp[" + std::to_string(in.src1) + "]" : in.src1 == 0x16 ? "1.0" : "0.0";
+                    src = "gen::double_to_extended(" + val + ", v);";
+                }
+                std::string dst;
+                if (!in.m3) {
+                    const unsigned r = in.dst & 0x1cu;
+                    dst = R(r) + " = v[0]; " + R(r + 1) + " = v[1]; " + R(r + 2) + " = v[2];";
+                } else if ((in.dst & 0x1cu) == 0) {
+                    dst = "c.m_fp[" + std::to_string(in.dst & 3u) + "] = gen::extended_to_double(v);";
+                } else {
+                    return unsupported(in);
+                }
+                body = "{ uint32_t v[3]; " + src + " " + dst + " }";
+                break;
+            }
             case 0x701: two("t2 * t1"); break;                             // mulo
             case 0x708: two("t2 % t1"); break;                             // remo (MAME: undefined on 0)
             case 0x70b: two("t1 == 0 ? 0u : t2 / t1"); break;              // divo (MAME: 0 on divide by zero)

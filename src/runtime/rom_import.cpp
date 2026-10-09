@@ -114,6 +114,31 @@ const Load kVF2[] = {
     {"mpr-17570.37", 0xBCCD324B, Samples2, 0x200000, 0x200000},
 };
 
+// Cyber Troopers Virtual-On (Export), Model 2B (von). MAME ROM_START(von).
+const Load kVon[] = {
+    {"epr-18832.15", 0xB900C332, Program, 0x000000, 0x080000},
+    {"epr-18833.16", 0xC793C638, Program, 0x000002, 0x080000},
+    {"epr-18666.13", 0x66EDB432, Program, 0x100000, 0x080000},
+    {"epr-18667.14", 0xB593D31F, Program, 0x100002, 0x080000},
+    {"mpr-18648.11", 0x2EDBE489, MainData, 0x000000, 0x400000},
+    {"mpr-18649.12", 0xE68C5AA6, MainData, 0x000002, 0x400000},
+    {"mpr-18650.9",  0x89A855B9, MainData, 0x800000, 0x400000},
+    {"mpr-18651.10", 0xF4C23107, MainData, 0x800002, 0x400000},
+    {"mpr-18662.29", 0xA33D3335, CoproData, 0x000000, 0x200000},
+    {"mpr-18663.30", 0xEA74A641, CoproData, 0x000002, 0x200000},
+    {"mpr-18654.17", 0x6A0CAF29, Polygons, 0x000000, 0x400000},
+    {"mpr-18655.21", 0xA4293E78, Polygons, 0x000002, 0x400000},
+    {"mpr-18656.18", 0xB4F51E76, Polygons, 0x800000, 0x400000},
+    {"mpr-18657.22", 0xA9BE4674, Polygons, 0x800002, 0x400000},
+    {"mpr-18660.27", 0xE53663E5, Textures, 0x000000, 0x200000},
+    {"mpr-18658.25", 0x3D0FCD01, Textures, 0x000002, 0x200000},
+    {"mpr-18661.28", 0x52B50410, Textures, 0x800000, 0x200000},
+    {"mpr-18659.26", 0x27AA8AE2, Textures, 0x800002, 0x200000},
+    {"epr-18670.31", 0x3E715F76, SoundProgram, 0x000000, 0x080000},
+    {"mpr-18652.32", 0x037EEE53, Samples1, 0x000000, 0x400000},
+    {"mpr-18653.34", 0x9EC3E7BF, Samples2, 0x000000, 0x400000},
+};
+
 // Per set: its files; main_data's ROM_COPY source (copied to every 1 MB
 // from there up to 0xF00000); where the TGP program the i960 uploads at
 // boot sits in main_data or program.
@@ -129,6 +154,7 @@ const Set kSets[] = {
     {"daytona93", kDaytona93, std::size(kDaytona93), 0x900000, 0x860020, 2024, 0xD6D611DDu, false},
     {"daytona", kDaytona, std::size(kDaytona), 0x800000, 0x800020, 2024, 0xD6D611DDu, false},
     {"vf2", kVF2, std::size(kVF2), 0x1000000, 0x3e90, 3802, 0xfd8d0383u, true},
+    {"von", kVon, std::size(kVon), 0x1000000, 0, 0, 0, true}, // 2B: a SHARC program, no TGP
 };
 
 const Set &this_set() {
@@ -152,7 +178,8 @@ std::vector<RomCheck> check_rom_set(const std::string &zip_path) {
     for (const Load &l : std::span(set.loads, set.count)) {
         RomCheck c;
         c.file = l.file;
-        const auto it = z->entries().find(l.file);
+        auto it = z->entries().find(l.file);
+        if (it == z->entries().end()) it = z->entries().find(std::string(set.name) + "/" + l.file); // a zip of a folder
         if (it == z->entries().end()) c.problem = "missing";
         else if (it->second.size != l.size) c.problem = "wrong size";
         else if (it->second.has_crc && it->second.crc != l.crc)
@@ -177,7 +204,8 @@ M2Board::Images import_rom_set(const std::string &zip_path) {
     img.pcm2.assign(0x400000, 0);
     const Set &set = this_set();
     for (const Load &l : std::span(set.loads, set.count)) {
-        const std::vector<uint8_t> data = z->read(l.file); // CRC against the archive's own
+        const std::string name = z->entries().count(l.file) ? std::string(l.file) : std::string(set.name) + "/" + l.file;
+        const std::vector<uint8_t> data = z->read(name); // CRC against the archive's own
         if (data.size() != l.size || crc32(data.data(), data.size()) != l.crc)
             throw ZipError(std::string(l.file) + ": not the " + set.name + " ROM this build was recompiled from");
         std::vector<uint8_t> *r = nullptr;
@@ -223,6 +251,7 @@ const char *rom_set_name() { return M2_ROMSET; }
 
 std::vector<uint8_t> tgp_program(const M2Board::Images &img) {
     const Set &set = this_set();
+    if (set.tgp_words == 0) return {}; // Model 2B: no TGP
     const uint8_t *base = set.tgp_in_program ? img.program.data() : img.main_data.data();
     const uint8_t *p = base + set.tgp_offset;
     if (crc32(p, set.tgp_words * 4) != set.tgp_crc) throw ZipError("TGP program not where expected");

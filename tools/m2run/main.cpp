@@ -201,9 +201,12 @@ int main(int argc, char **argv) {
                 static uint64_t last_instr = 0;
                 const uint64_t instr = game.instructions() - last_instr;
                 last_instr = game.instructions();
-                std::fprintf(hashes, "%" PRIu64 " %016" PRIx64 " %.1f core=%.0f geo=%.0f sound=%.0f instr=%" PRIu64 "\n",
+                static uint64_t last_sharc = 0;
+                const uint64_t sharc_now = game.board().sharc() ? game.board().sharc()->instructions() : 0;
+                std::fprintf(hashes, "%" PRIu64 " %016" PRIx64 " %.1f core=%.0f geo=%.0f sound=%.0f instr=%" PRIu64 " sharc=%" PRIu64 "\n",
                              game.board().frame(), game.board().video().screen_hash(), ms, double(fp.core()) / 1000.0,
-                             double(fp.geometry) / 1000.0, double(fp.sound) / 1000.0, instr);
+                             double(fp.geometry) / 1000.0, double(fp.sound) / 1000.0, instr, sharc_now - last_sharc);
+                last_sharc = sharc_now;
             }
             if (!ram_dir.empty() && every && game.board().frame() % every == 0) {
                 char path[512];

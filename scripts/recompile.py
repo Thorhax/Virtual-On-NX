@@ -42,7 +42,7 @@ def tool(build, config, name):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--set", default="daytona93", choices=["daytona93", "daytona", "vf2"])
+    ap.add_argument("--set", default="daytona93", choices=["daytona93", "daytona", "vf2", "von"])
     ap.add_argument("--build-dir", default="build")
     ap.add_argument("--config", default="Release")
     args = ap.parse_args()
@@ -61,6 +61,7 @@ def main():
         if subprocess.run([tool(build, args.config, "m2import"), roms[0], cache], cwd=ROOT).returncode:
             sys.exit(ROM_REJECTED_EXIT)  # m2import printed which file is missing or wrong
     run(build_cmd + ["--target", "m2recomp", "m2tgprecomp", "m2sndrecomp"])
+    model2b = os.path.getsize(os.path.join(cache, "tgp_program.bin")) == 0  # a SHARC, no TGP
 
     gen = os.path.join(build, "gen", args.set)
     if os.path.isdir(gen):
@@ -75,8 +76,13 @@ def main():
     run(recomp)
     tgp = os.path.join(build, "gen", args.set + "_tgp")
     os.makedirs(tgp, exist_ok=True)
-    run([tool(build, args.config, "m2tgprecomp"), os.path.join(cache, "tgp_program.bin"),
-         os.path.join(tgp, "tgp_gen.cpp")])
+    if model2b:
+        with open(os.path.join(tgp, "tgp_gen.cpp"), "w") as f:  # nothing to recompile: an empty TGP
+            f.write('#include "runtime/tgp.h"\nnamespace rt::tgpgen {\nconst uint32_t program_crc32 = 0;\n'
+                    'const uint32_t program_words = 0;\nvoid run(Tgp &, uint64_t) {}\n}\n')
+    else:
+        run([tool(build, args.config, "m2tgprecomp"), os.path.join(cache, "tgp_program.bin"),
+             os.path.join(tgp, "tgp_gen.cpp")])
 
     snd = os.path.join(build, "gen", args.set + "_snd")
     os.makedirs(snd, exist_ok=True)

@@ -78,16 +78,18 @@ target_include_directories(trace PUBLIC src)
 # The ROM set the game is recompiled from: daytona93 (Daytona USA Deluxe '93,
 # the default) or daytona (Revision A, 1994). One set per build directory:
 # its generated code, seeds and saves are its own.
-set(M2_ROMSET daytona93 CACHE STRING "MAME ROM set to recompile: daytona93, daytona, or vf2")
-set_property(CACHE M2_ROMSET PROPERTY STRINGS daytona93 daytona vf2)
-if(NOT M2_ROMSET MATCHES "^(daytona93|daytona|vf2)$")
-    message(FATAL_ERROR "M2_ROMSET must be daytona93, daytona, or vf2, not ${M2_ROMSET}")
+set(M2_ROMSET daytona93 CACHE STRING "MAME ROM set to recompile: daytona93, daytona, vf2 or von")
+set_property(CACHE M2_ROMSET PROPERTY STRINGS daytona93 daytona vf2 von)
+if(NOT M2_ROMSET MATCHES "^(daytona93|daytona|vf2|von)$")
+    message(FATAL_ERROR "M2_ROMSET must be daytona93, daytona, vf2 or von, not ${M2_ROMSET}")
 endif()
 
 add_library(runtime STATIC
     src/runtime/cpu.cpp
     src/runtime/tgp.cpp
     src/runtime/m2_tgp_board.cpp
+    src/runtime/m2_sharc_board.cpp
+    src/runtime/sharc/sharc.cpp
     src/runtime/geo.cpp
     src/runtime/raster.cpp
     src/runtime/video.cpp
@@ -112,6 +114,9 @@ target_include_directories(runtime PUBLIC src)
 target_compile_definitions(runtime PUBLIC M2_ROMSET="${M2_ROMSET}")
 if(M2_ROMSET STREQUAL "vf2")
     target_compile_definitions(runtime PUBLIC M2_ROMSET_VF2=1)
+endif()
+if(M2_ROMSET STREQUAL "von")
+    target_compile_definitions(runtime PUBLIC M2_ROMSET_VON=1)
 endif()
 # 7z ROM sets: the 7-Zip LZMA SDK's decoder (public-domain files only),
 # fetched by scripts/setup.py into extern/lzma.

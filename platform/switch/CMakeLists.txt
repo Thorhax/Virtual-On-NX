@@ -28,9 +28,18 @@ add_compile_options(
     -fdata-sections
 )
 
-set(M2_ROMSET "daytona" CACHE STRING "Game to build: daytona or vf2")
+set(M2_ROMSET "daytona" CACHE STRING "Game to build: daytona, vf2 or von")
 
-if(M2_ROMSET STREQUAL "vf2")
+if(M2_ROMSET STREQUAL "von")
+    set(DEFAULT_GEN_ROOT "${DAYTONA_ROOT}/build-von/gen")
+    set(GAME_NAME "Virtual-On")
+    set(APP_TARGET "von_switch")
+    set(ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/icon_von.jpg")
+    # The app reads sdmc:/switch/von/von.zip; a local build may bundle it here.
+    set(VON_ROMFS_DIR "none" CACHE PATH "RomFS folder bundled into the NRO")
+    set(ROMFS_DIR "${VON_ROMFS_DIR}")
+    add_compile_definitions(M2_ROMSET_VON=1 M2_SCSP_GAME=1)
+elseif(M2_ROMSET STREQUAL "vf2")
     set(DEFAULT_GEN_ROOT "${DAYTONA_ROOT}/build-vf2/gen")
     set(GAME_NAME "Virtua Fighter 2")
     set(APP_TARGET "vf2_switch")
@@ -39,7 +48,7 @@ if(M2_ROMSET STREQUAL "vf2")
     # pass -DVF2_ROMFS_DIR=none (the app then reads sdmc:/switch/vf2/vf2.zip).
     set(VF2_ROMFS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/romfs_vf2" CACHE PATH "RomFS folder bundled into the NRO")
     set(ROMFS_DIR "${VF2_ROMFS_DIR}")
-    add_compile_definitions(M2_ROMSET_VF2=1)
+    add_compile_definitions(M2_ROMSET_VF2=1 M2_SCSP_GAME=1)
 else()
     set(DEFAULT_GEN_ROOT "${DAYTONA_ROOT}/build-daytona/gen")
     set(GAME_NAME "Daytona USA")
@@ -82,7 +91,7 @@ target_include_directories(switch_ymfm SYSTEM PUBLIC "${YMFM_DIR}")
 target_compile_options(switch_ymfm PRIVATE -w)
 
 set(RUNTIME_FILES
-    cpu tgp m2_tgp_board geo raster video m2_board game_loop zip rom_import
+    cpu tgp m2_tgp_board m2_sharc_board sharc/sharc geo raster video m2_board game_loop zip rom_import
     archive m2_replay_bus lockstep snd_cpu multipcm scsp sound_board
     native_sample_mixer native_sound_sequencer native_sound_engine comm_board
     enhance
@@ -98,6 +107,9 @@ target_link_libraries(switch_runtime PUBLIC switch_trace switch_i960 switch_ymfm
 target_compile_definitions(switch_runtime PUBLIC M2_ROMSET="${M2_ROMSET}")
 if(M2_ROMSET STREQUAL "vf2")
     target_compile_definitions(switch_runtime PUBLIC M2_ROMSET_VF2=1)
+endif()
+if(M2_ROMSET STREQUAL "von")
+    target_compile_definitions(switch_runtime PUBLIC M2_ROMSET_VON=1)
 endif()
 
 file(GLOB GEN_SOURCES CONFIGURE_DEPENDS "${DAYTONA_GEN_ROOT}/${M2_ROMSET}/*.cpp")

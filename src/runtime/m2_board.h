@@ -17,6 +17,7 @@
 #include "runtime/geo.h"
 #include "runtime/lockstep.h"
 #include "runtime/m2_tgp_board.h"
+#include "runtime/m2_sharc_board.h"
 #include "runtime/video.h"
 
 #include <array>
@@ -283,7 +284,7 @@ public:
     // VF2's are its loaders (Huffman-style decompression at 0x4c6e0-0x4c930:
     // ALU 1 cycle, loads 4, stores 2, about 1.5 cycles each), 290,000 in
     // MAME. At 110,000 the stage and title loads took 2.6 times as long.
-#if defined(M2_ROMSET_VF2)
+#if defined(M2_ROMSET_VF2) || defined(M2_ROMSET_VON)
     static constexpr uint64_t kFrameInstructions = 290000;
 #else
     static constexpr uint64_t kFrameInstructions = 110000;
@@ -306,6 +307,7 @@ public:
     void set_frame_skip(int skip) { frame_skip_ = skip < 0 ? 0 : skip > 2 ? 2 : skip; }
     IoBoard &io() { return io_; }
     TgpBoard &tgp() { return tgp_; }
+    SharcBoard *sharc() { return sharc_.get(); } // Model 2B only
     // Bytes sent to the sound board since the last take.
     std::vector<uint8_t> take_sound_bytes() { sound_total_ += uart_out_.size(); return std::exchange(uart_out_, {}); }
     uint64_t sound_bytes_total() const { return sound_total_ + uart_out_.size(); }
@@ -318,7 +320,7 @@ public:
     const CommBoard *comm_board() const { return comm_board_.get(); }
 
 private:
-    enum Kind : uint8_t { Unmapped, Rom, Ram, Tex, Dev };
+    enum Kind : uint8_t { Unmapped, Rom, Ram, Tex, TexB, Dev }; // TexB: Model 2B texture RAM (plain, counted)
     struct Page {
         Kind kind = Unmapped;
         bool burst = false;
@@ -343,11 +345,13 @@ private:
         comm_;
     std::vector<Page> pages_;
 
-    TgpBoard tgp_;
+    TgpBoard tgp_;                       // geometrizer ports and buffer RAM (and, before 2B, the TGP)
+    std::unique_ptr<SharcBoard> sharc_;  // Model 2B coprocessor
     std::unique_ptr<Geo> geo_;
     std::unique_ptr<Video> video_;
     IoBoard io_;
-    bool is_model2a_ = false;
+    bool is_model2a_ = false; // 2A and 2B share the 2A RAM, I/O board and timers
+    bool is_model2b_ = false;
     Sega315_5649 io315_;
     std::unique_ptr<CommBoard> comm_board_; // link play only
     Cpu *cpu_ = nullptr;

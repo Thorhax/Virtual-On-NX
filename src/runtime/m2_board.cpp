@@ -62,6 +62,10 @@ M2Board::M2Board(Images images)
 #if defined(M2_ROMSET_VF2)
     is_model2a_ = true;
 #endif
+#if defined(M2_ROMSET_VON)
+    is_model2a_ = is_model2b_ = true; // 2B-CRX: 2A's RAM, I/O board and timers, a SHARC for the TGP
+    sharc_ = std::make_unique<SharcBoard>(img_.copro_data, tgp_.buffer_data());
+#endif
     if (is_model2a_) std::fill(std::begin(timervals_), std::end(timervals_), 0xfffffu); // MAME machine_reset
 
     // memory map
@@ -99,9 +103,19 @@ M2Board::M2Board(Images images)
     map(0x10000000, 0x105fffff, Dev, nullptr, 0, false);
     map(0x11600000, 0x1167ffff, Ram, fb_a_.data());
     map(0x11680000, 0x116fffff, Ram, fb_b_.data());
-    map(0x12000000, 0x121fffff, Tex, tex0_.data(), 0x200000);
-    map(0x12400000, 0x125fffff, Tex, tex1_.data(), 0x200000);
-    map(0x12800000, 0x1281ffff, Ram, luma_.data());
+    if (is_model2b_) {
+        // MAME model2b_crx_mem: texture RAM as plain RAM (1 MB each, mirrored),
+        // luma RAM through byte lane 0 of each 16-bit word; SHARC IOP; UART.
+        map(0x11000000, 0x110fffff, TexB, tex0_.data(), 0x100000);
+        map(0x11200000, 0x112fffff, TexB, tex1_.data(), 0x100000);
+        map(0x11400000, 0x1140ffff, Dev, nullptr, 0, true);
+        map(0x008c0000, 0x008c0fff, Dev, nullptr, 0, false);
+        map(0x009c0000, 0x009c0fff, Dev, nullptr, 0, false);
+    } else {
+        map(0x12000000, 0x121fffff, Tex, tex0_.data(), 0x200000);
+        map(0x12400000, 0x125fffff, Tex, tex1_.data(), 0x200000);
+        map(0x12800000, 0x1281ffff, Ram, luma_.data());
+    }
 
     geo_ = std::make_unique<Geo>(img_.polygons, img_.textures, tgp_.buffer_data());
     video_ = std::make_unique<Video>(tile_.data(), chr_.data());
@@ -185,6 +199,11 @@ void M2Board::vblank_end() {
 
 bool M2Board::in_idle_loop() const {
     const uint32_t ip = cpu_->m_IP;
+#if defined(M2_ROMSET_VON)
+    // Virtual-On waits for the frame bit of videoctl (0x0098000c, bit 2) to
+    // flip: 0x29a3c-0x29a4c (ld; and; cmpi; addo; be).
+    return ip >= 0x29a3c && ip <= 0x29a4c;
+#endif
     if (is_model2a_) {
         return (ip >= 0x0f7c && ip <= 0x0f8c) || (ip >= 0x10f90 && ip <= 0x10fa4);
     }
@@ -297,6 +316,27 @@ void M2Board::uart_shift_done() {
 // --- device registers --------------------------------------------------------
 
 uint32_t M2Board::dev_read(uint32_t addr, uint32_t mask) {
+    if (is_model2b_) {
+        if (addr >= 0x00900000 && addr <= 0x0097ffff) {
+            sharc_->sync(); // results land in buffer RAM
+            return tgp_.buffer_r(addr & 0x1ffff);
+        }
+        if (addr >= 0x00884000 && addr <= 0x00887fff) return sharc_->fifo_r();
+        if (addr >= 0x11400000 && addr <= 0x1140ffff) { // luma RAM, umask16 0x00ff
+            const uint32_t i = (addr & 0xffff) >> 1;
+            return uint32_t(luma_[size_t(i) * 4]) | uint32_t(luma_[size_t(i + 1) * 4]) << 16;
+        }
+        if (addr >= 0x009c0000 && addr <= 0x009c0fff) { // i8251, umask32 0xff: data, then status
+            if ((addr & 4) == 0) return 0;
+            return (uart_txrdy_ ? 0x05u : 0x00u) | 0x80u;
+        }
+        switch (addr) {
+        case 0x00980000: return sharc_->coproctl_r();
+        case 0x00980004: return sharc_->fifo_out_empty() ? 1 : 0; // fifo_control_r
+        case 0x00980014: return sharc_->status_r();
+        default: break;
+        }
+    }
     if (addr >= 0x00900000 && addr <= 0x0097ffff) {
         tgp_.sync(); // the TGP answers through its mailbox here (0x0091fff0-8)
         return tgp_.buffer_r(addr & 0x1ffff);
@@ -355,6 +395,24 @@ uint32_t M2Board::dev_read(uint32_t addr, uint32_t mask) {
 
 void M2Board::dev_write(uint32_t addr, uint32_t data, uint32_t mask) {
     if (addr >= 0x00900000 && addr <= 0x0097ffff) { tgp_.buffer_w(addr & 0x1ffff, data, mask); return; }
+    if (is_model2b_) {
+        const uint32_t d = data & mask;
+        if (addr == 0x00980000) { sharc_->coproctl_w(data, mask); return; }
+        if (addr >= 0x00884000 && addr <= 0x00887fff) { sharc_->fifo_w(d); return; }
+        if (addr >= 0x00880000 && addr <= 0x00883fff) { sharc_->function_port_w((addr - 0x00880000) >> 2, d); return; }
+        if (addr >= 0x008c0000 && addr <= 0x008c0fff) { sharc_->iop_w((addr - 0x008c0000) >> 2, d); return; }
+        if (addr == 0x00980020) return; // bank control, always 0
+        if (addr >= 0x11400000 && addr <= 0x1140ffff) {
+            const uint32_t i = (addr & 0xffff) >> 1;
+            if (mask & 0x000000ff) luma_[size_t(i) * 4] = uint8_t(data);
+            if (mask & 0x00ff0000) luma_[size_t(i + 1) * 4] = uint8_t(data >> 16);
+            return;
+        }
+        if (addr >= 0x009c0000 && addr <= 0x009c0fff) {
+            if ((addr & 4) == 0 && (mask & 0xff)) uart_write_data(uint8_t(data));
+            return; // mode/command bytes
+        }
+    }
     if (addr == 0x00980000) { tgp_.coproctl_w(data, mask); return; }
     const uint32_t d = data & mask; // handlers without a mask see unwritten lanes as 0
     if (addr >= 0x00884000 && addr <= 0x00887fff) { tgp_.fifo_w(d); return; }
@@ -458,7 +516,7 @@ uint8_t M2Board::read_byte(uint32_t addr) {
     const Page &p = page(addr);
     const unsigned sh = (addr & 3) * 8;
     switch (p.kind) {
-    case Rom: case Ram: case Tex: return p.base[addr & 0xfff];
+    case Rom: case Ram: case Tex: case TexB: return p.base[addr & 0xfff];
     case Dev: return uint8_t(dev_read(addr & ~3u, 0xffu << sh) >> sh);
     default: return 0;
     }
@@ -469,7 +527,7 @@ uint16_t M2Board::read_word(uint32_t addr) {
     const Page &p = page(addr);
     const unsigned sh = (addr & 2) * 8;
     switch (p.kind) {
-    case Rom: case Ram: case Tex: {
+    case Rom: case Ram: case Tex: case TexB: {
         uint16_t v;
         std::memcpy(&v, p.base + (addr & 0xfff), 2);
         return v;
@@ -483,7 +541,7 @@ uint32_t M2Board::read_dword(uint32_t addr) {
     addr &= ~3u;
     const Page &p = page(addr);
     switch (p.kind) {
-    case Rom: case Ram: case Tex: {
+    case Rom: case Ram: case Tex: case TexB: {
         uint32_t v;
         std::memcpy(&v, p.base + (addr & 0xfff), 4);
         return v;
@@ -505,6 +563,7 @@ void M2Board::write_byte(uint32_t addr, uint8_t data) {
         return;
     }
     case Tex: tex_write(p, addr, uint32_t(data) << sh); return;
+    case TexB: p.base[addr & 0xfff] = data; ++tex_generation_; return;
     case Dev: dev_write(addr & ~3u, uint32_t(data) << sh, 0xffu << sh); return;
     default: return;
     }
@@ -522,6 +581,7 @@ void M2Board::write_word(uint32_t addr, uint16_t data) {
         return;
     }
     case Tex: tex_write(p, addr, uint32_t(data) << sh); return;
+    case TexB: std::memcpy(p.base + (addr & 0xfff), &data, 2); ++tex_generation_; return;
     case Dev: dev_write(addr & ~3u, uint32_t(data) << sh, 0xffffu << sh); return;
     default: return;
     }
@@ -538,6 +598,7 @@ void M2Board::write_dword(uint32_t addr, uint32_t data) {
         return;
     }
     case Tex: tex_write(p, addr, data); return;
+    case TexB: std::memcpy(p.base + (addr & 0xfff), &data, 4); ++tex_generation_; return;
     case Dev: dev_write(addr, data, 0xffffffffu); return;
     default: return;
     }

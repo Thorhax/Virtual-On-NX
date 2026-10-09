@@ -1,3 +1,38 @@
+# Cyber Troopers Virtual-On (Sega Model 2B) — Nintendo Switch Port
+*Started October 9, 2026. The VF2 notes follow below.*
+
+Working tree `Model2/virtualon/von-nx` (a clone of vf2-nx). ROM: MAME `von`
+(`roms/von.zip`; files may sit in a `von/` folder inside the zip).
+
+```sh
+python3 scripts/recompile.py --set von --build-dir build-von
+cmake -S . -B build-von -DCMAKE_BUILD_TYPE=Release && cmake --build build-von --target m2run
+bash scripts/build_switch_von.sh          # -> Model2/virtualon/von.nro (no ROM inside)
+```
+
+On the Switch: `sdmc:/switch/von/von.nro` + `von.zip`.
+
+| Piece | Status |
+| :--- | :--- |
+| i960 (160,733 instructions, 2,599 seeds) | Recompiled; long-real FP, movre, flushreg added to m2recomp |
+| Sound 68000 (3,696 instructions) | Recompiled; seeds = jump-table entries (`seeds/von_snd.txt`) |
+| SHARC ADSP-21062 coprocessor | MAME's interpreter, lifted out (`src/runtime/sharc`), clockless (`m2_sharc_board`) |
+| Model 2B map | Texture RAM 0x11000000/0x11200000, luma 0x11400000, UART 0x009c0000, IOP 0x008c0000 |
+| Boot, attract, coin, machine select, fight, mission 2 | Working on the host (scripted) |
+| Sound | Working; attract levels close to MAME's |
+| Idle loop | 0x29a3c-0x29a4c (frame-bit poll of videoctl) |
+| Boot loading | About 1.6x faster than MAME (CPU-bound frames at 290k instructions) |
+
+Host cost (attract, Release): core 3.9 ms per frame; SHARC ~70k instructions
+per frame, about half of the core time. If the Switch cannot hold 57.52 fps,
+next step: a static SHARC recompiler (the program is uploaded once at boot).
+
+Switch controls: left stick / D-pad = left lever, right stick / X B Y A =
+right lever, ZL / ZR = left / right shot, L / R = left / right dash, Plus
+start, Minus coin, Plus+Minus menu. Sound mix defaults to stereo.
+
+---
+
 # Virtua Fighter 2 (Sega Model 2A) — Nintendo Switch Port
 **Project Status & Technical Notes**
 *Updated: October 9, 2026 (round 4)*

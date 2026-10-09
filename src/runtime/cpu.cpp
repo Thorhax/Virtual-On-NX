@@ -431,4 +431,21 @@ void fatalerror(const char *fmt, ...)
 	throw Fatal(buf);
 }
 
+// MAME i960.cpp, flushreg.
+void Cpu::flushreg()
+{
+	if (m_rcache_pos > 4)
+	{
+		m_rcache_pos = 4;
+	}
+	for (int t1 = 0; t1 < m_rcache_pos; t1++)
+	{
+		for (int i = 0; i < 0x10; i++)
+		{
+			bus->write_dword(m_rcache_frame_addr[t1] + (i * sizeof(uint32_t)), m_rcache[t1][i]);
+		}
+	}
+	m_rcache_pos = 0;
+}
+
 } // namespace rt

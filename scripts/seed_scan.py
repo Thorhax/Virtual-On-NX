@@ -55,7 +55,7 @@ def words(data):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--set", default="daytona93", choices=["daytona93", "daytona", "vf2"])
+    ap.add_argument("--set", default="daytona93", choices=["daytona93", "daytona", "vf2", "von"])
     ap.add_argument("--build-dir", default="build")
     ap.add_argument("--config", default="Release")
     ap.add_argument("--append", action="store_true", help="add the new seeds to seeds/<set>.txt")
@@ -74,7 +74,7 @@ def main():
     def off(a):
         if 0x800 <= a < len(img):
             return a
-        if args.set != "vf2" and 0x220000 <= a < 0x240000:
+        if args.set not in ("vf2", "von") and 0x220000 <= a < 0x240000:
             return a - 0x200000
         return None
 

@@ -1,3 +1,24 @@
+# Cyber Troopers Virtual-On for Nintendo Switch (Sega Model 2B static recompilation)
+
+The Model 2 static recompilation extended to Virtual-On (Model 2B, MAME set
+`von`). The i960 program and the sound 68000 program are statically
+recompiled to C++; the ADSP-21062 SHARC coprocessor runs MAME's interpreter,
+clockless; the board, SCSP, geometrizer, rasterizer and tilemaps are native.
+
+No game data is in this repository or in the release: supply your own MAME
+`von.zip` and place it at `sdmc:/switch/von/von.zip` next to `von.nro`.
+
+Switch build (devkitPro, or Docker with `devkitpro-mesa-rust:latest`):
+
+    python3 scripts/recompile.py --set von --build-dir build-von   # needs roms/von.zip
+    bash scripts/build_switch_von.sh
+
+Controls: left stick / D-pad left lever, right stick / X B Y A right lever,
+ZL / ZR shots, L / R dash, Plus start, Minus coin, Plus+Minus menu. Notes on
+the port: `PROJECT_STATUS.md`.
+
+The Virtua Fighter 2 and Daytona USA documentation follows.
+
 # Virtua Fighter 2 for Nintendo Switch (Sega Model 2A static recompilation)
 
 This repository is the Daytona USA static recompilation extended to Virtua

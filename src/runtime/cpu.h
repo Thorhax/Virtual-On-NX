@@ -95,6 +95,7 @@ public:
     void send_iac(uint32_t adr);
     void take_interrupt(int vector, int lvl);
     void check_pending_irqs();
+    void flushreg(); // MAME i960 flushreg: cached local frames back to memory
     void do_call(uint32_t adr, int type, uint32_t stack);
     void do_ret_0();
     void do_ret();
