@@ -35,6 +35,24 @@ stereo, recording a clip crashes the system recorder (grc) and Atmosphère on
 hardware (2026-10-10); mono records fine. The app's logs stay healthy, so the
 crash is in grc's encoder, not the port.
 
+Widescreen (2026-10-10, testing): the Daytona widescreen enhancement
+(`GameLoop::set_aspect`) works on Virtual-On as is: the clip planes open out
+and the arena fills the sides; the HUD stays 4:3 centred. The game logic is
+unchanged (identical i960 instruction counts at 4:3 and 16:9). The threaded
+renderer now handles the margin (not the Daytona HUD-at-edges mode): host
+16:9 threaded frames match unthreaded ones over 3,199 frames (one frame later).
+Switch menu: SCREEN 16:9 / 4:3, 16:9 by default for von.
+- The Switch build uses M2_VITA_RENDER_OPT, which forced the margin to 0;
+  now only on the Vita. Its compose copies the 496-wide back layers centred.
+- Launch-over-the-sea sky is a back tilemap: `Video::set_wrap_backdrop`
+  draws the back layers 512 wide and fills the margins as they wrap
+  (m2run `--wrap-backdrop`; on for von on the Switch).
+- Heavy stages at 16:9 dipped to ~48 fps (raster 13-14 ms + tiles 3.4 +
+  compose 1.6 on the video thread). The raster slices now skip polygons via a
+  row-span pre-pass and clear their own rows, and the 2D layers are drawn
+  while the raster workers start (Raster::render `alongside`). Output stays
+  identical (host hashes vs the standard path over 3,199 + 1,699 frames).
+
 ---
 
 # Virtua Fighter 2 (Sega Model 2A) — Nintendo Switch Port
