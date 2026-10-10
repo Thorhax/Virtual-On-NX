@@ -14,8 +14,13 @@ Switch build (devkitPro, or Docker with `devkitpro-mesa-rust:latest`):
     bash scripts/build_switch_von.sh
 
 Controls: left stick / D-pad left lever, right stick / X B Y A right lever,
-ZL / ZR shots, L / R dash, Plus start, Minus coin, Plus+Minus menu. Notes on
-the port: `PROJECT_STATUS.md`.
+ZL / ZR shots, L / R dash, Plus start, Minus coin, Plus+Minus menu,
+Minus+L3 test, Minus+R3 service (in test mode, service moves the cursor and
+test selects; pick EXIT to leave). Notes on the port: `PROJECT_STATUS.md`.
+
+Sound defaults to mono. If you switch to stereo in the Plus+Minus menu,
+recording a video clip (holding Capture) crashes the Switch's system recorder
+and Atmosphère. Stay on mono if you record clips.
 
 The Virtua Fighter 2 and Daytona USA documentation follows.
 

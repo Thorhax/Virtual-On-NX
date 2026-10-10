@@ -367,11 +367,9 @@ int main(int, char **) {
     uint8_t pulse = 0;
     uint32_t previous_buttons = 0;
     bool muted = false;
-#if defined(M2_ROMSET_VON)
-    bool arcade_mono = false; // stereo (the hard-right hits are a VF2 thing)
-#else
-    bool arcade_mono = true; // VF2: see Audio::set_arcade_mono
-#endif
+    // Mono by default: in Virtual-On, recording a clip with the Capture
+    // button while in stereo crashes the system recorder (grc).
+    bool arcade_mono = true; // see Audio::set_arcade_mono
     std::string banner;       // short in-game message (cheat toggles)
     uint32_t banner_until = 0;
 

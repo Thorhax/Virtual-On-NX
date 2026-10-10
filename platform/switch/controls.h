@@ -55,10 +55,14 @@ public:
         held_ = pad1.buttons;
         if (menu_chord(pad1.buttons)) return in;
 
-        if (pad1.buttons & Minus) in.in0 &= uint8_t(~0x01);  // coin
+        // Stick clicks happen by accident on twin sticks, so test and
+        // service need Minus held: Minus+L3 test, Minus+R3 service. In the
+        // test menu, service moves the cursor and test selects.
+        const bool sys_chord = (pad1.buttons & Minus) && (pad1.buttons & (StickL | StickR));
+        if ((pad1.buttons & Minus) && !sys_chord) in.in0 &= uint8_t(~0x01); // coin
         if (pad1.buttons & Plus) in.in0 &= uint8_t(~0x10);   // start
-        if (pad1.buttons & StickL) in.in0 &= uint8_t(~0x04); // test
-        if (pad1.buttons & StickR) in.in0 &= uint8_t(~0x08); // service
+        if (sys_chord && (pad1.buttons & StickL)) in.in0 &= uint8_t(~0x04); // test
+        if (sys_chord && (pad1.buttons & StickR)) in.in0 &= uint8_t(~0x08); // service
 
         constexpr float kDeadzone = 0.35f;
         if (pad1.buttons & ZL) in.in1 &= uint8_t(~0x01);

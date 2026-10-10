@@ -29,7 +29,11 @@ next step: a static SHARC recompiler (the program is uploaded once at boot).
 
 Switch controls: left stick / D-pad = left lever, right stick / X B Y A =
 right lever, ZL / ZR = left / right shot, L / R = left / right dash, Plus
-start, Minus coin, Plus+Minus menu. Sound mix defaults to stereo.
+start, Minus coin, Plus+Minus menu, Minus+L3 test, Minus+R3 service (stick
+clicks alone were too easy to hit). Sound mix defaults to arcade mono: with
+stereo, recording a clip crashes the system recorder (grc) and Atmosphère on
+hardware (2026-10-10); mono records fine. The app's logs stay healthy, so the
+crash is in grc's encoder, not the port.
 
 ---
 
