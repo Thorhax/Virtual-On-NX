@@ -24,6 +24,10 @@ and Atmosphère. Stay on mono if you record clips.
 
 A CPU overclock of 1428 MHz is recommended (for example with sys-clk).
 
+16:9 widescreen is on by default: the arena fills the sides of the screen
+and the HUD stays in the middle. Switch back to the original 4:3 screen in
+the Plus+Minus menu (SCREEN).
+
 The Virtua Fighter 2 and Daytona USA documentation follows.
 
 # Virtua Fighter 2 for Nintendo Switch (Sega Model 2A static recompilation)
