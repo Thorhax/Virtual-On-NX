@@ -22,6 +22,8 @@ Sound defaults to mono. If you switch to stereo in the Plus+Minus menu,
 recording a video clip (holding Capture) crashes the Switch's system recorder
 and Atmosphère. Stay on mono if you record clips.
 
+A CPU overclock of 1428 MHz is recommended (for example with sys-clk).
+
 The Virtua Fighter 2 and Daytona USA documentation follows.
 
 # Virtua Fighter 2 for Nintendo Switch (Sega Model 2A static recompilation)
